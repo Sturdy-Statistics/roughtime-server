@@ -1,0 +1,109 @@
+# /etc/systemd/system/roughtime.service
+[Unit]
+Description=Roughtime UDP Server (Clojure)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+# Run as a dedicated, unprivileged user
+User=roughtime
+Group=roughtime
+WorkingDirectory=/opt/roughtime/roughtime-server
+
+# Ensure PATH includes java
+Environment=PATH=/usr/bin
+
+# secrets
+LoadCredentialEncrypted=longterm.prv.b64:/etc/roughtime/longterm.prv.b64.cred
+LoadCredentialEncrypted=longterm.pub:/etc/roughtime/longterm.pub.cred
+LoadCredentialEncrypted=keychain.b64:/etc/roughtime/keychain.b64.cred
+LoadCredentialEncrypted=password.edn:/etc/roughtime/password.edn.cred
+
+# Env vars
+Environment=LOG_PATH=/opt/roughtime/logs/roughtime.log
+
+# app entrypoint
+Type=exec
+
+ExecCondition=/usr/bin/test -r /opt/roughtime/roughtime-server/current-standalone.jar
+ExecStart=/usr/bin/java -jar /opt/roughtime/roughtime-server/current-standalone.jar \
+  :secrets-dir ${CREDENTIALS_DIRECTORY} \
+  :log-path ${LOG_PATH}
+
+# Graceful shutdown:
+# send SIGTERM to main proc, then SIGKILL to all procs after TimeoutStopSec
+KillMode=mixed
+KillSignal=SIGTERM
+TimeoutStopSec=20
+SendSIGKILL=yes
+FinalKillSignal=SIGKILL
+SuccessExitStatus=143
+
+# Restart policy
+Restart=on-failure
+RestartSec=2
+
+# Log to journald; tag with SyslogIdentifier
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=roughtime
+
+# ---- Security hardening ----
+# security
+NoNewPrivileges=yes
+
+# process
+LimitCORE=0
+LimitNOFILE=65536
+UMask=0077
+KeyringMode=private
+
+# paths
+ProtectProc=invisible
+ProcSubset=pid
+
+
+# sandboxing
+# - make entire filesystem read only
+ProtectSystem=strict
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectControlGroups=yes
+# - home directories appear empty 
+ProtectHome=yes
+# - whitelist for writing
+ReadWritePaths=/opt/roughtime/logs
+# -
+PrivateUsers=yes
+ProtectHostname=yes
+ProtectClock=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+RestrictNamespaces=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=no
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+PrivateMounts=yes
+SystemCallFilter=@system-service
+SystemCallErrorNumber=EPERM
+
+# restrict network access to loopback
+IPAddressAllow=127.0.0.1
+IPAddressDeny=any
+SocketBindAllow=ipv4:udp:2002
+SocketBindDeny=any
+
+# extra hardening
+RemoveIPC=yes
+CapabilityBoundingSet=
+AmbientCapabilities=
+
+[Install]
+WantedBy=multi-user.target
+
+# Local Variables:
+# mode: conf-unix
+# End:
