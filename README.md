@@ -90,6 +90,56 @@ Shutdown flows naturally downstream:
 4. Workers drain and close `response-channel`
 5. Sender drains and exits
 
+## Performance Notes
+
+Above about 20,000 requests/sec the server will begin load shedding.
+Below are average times in microseconds per response spent in each phase of the pipeline (sampled at 25,000 requests/sec on an M2 MacBook Air):
+
+```clj
+;; 2 workers; batch of 512 → communication bound, snd-queue backs up
+{;; compute time in μs, per request
+ :receive-and-queue    0.5
+ :batch               12.5
+ :respond             11.8
+ :send                 5.3
+
+ ;; queue wait time in μs
+ :rvc-queue           27.9 ;; single req
+ :worker-queue        54.3 ;; batch of 512
+ :snd-queue          370.0 ;; batch of 512
+ }
+```
+
+
+```clj
+;; 1 worker; batch of 64 → CPU-bound
+{ ;; compute time in μs, per request
+ :receive-and-queue  0.5
+ :batch             11.9
+ :respond           10.6
+ :send               4.4
+
+ ;; queue wait time in μs
+ :rvc-queue         20.8 ;; single req
+ :worker-queue      54.0 ;; batch of 64
+ :snd-queue         64.2 ;; batch of 64
+ }
+```
+
+### Analysis
+
+In both cases, the total compute time of ~30 μs per response implies a max throughput of ~30k req/sec.
+
+The `:respond` phase involves parsing requests and assembling responses which include Ed25519 signatures.
+This is by far the most CPU-intensive step; however, at ~12 μs, it is not the primary bottleneck.
+In theory, with 4 cores the workers could respond to >300k req/sec; however, the batcher and sender would become bottlenecks.
+A high performance server would need to speed up these steps.
+
+### Load Shedding & Back-pressure
+
+The server manages over-capacity through a combination of blocking and load-shedding:
+1. **Back-pressure:** When the sender cannot keep up, the `response-channel` fills, blocking the Workers.  This propagates back to the Batcher.
+2. **Load Shedding:** The `request-channel` uses a **sliding buffer**.  Once the downstream stages are blocked and the buffer is full, the server shed loads by dropping the oldest uncalculated requests, ensuring the server remains responsive and processes the most recent traffic possible.
 
 ---
 

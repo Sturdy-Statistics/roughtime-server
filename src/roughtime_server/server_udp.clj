@@ -33,12 +33,14 @@
 
   ;; blocking receive; returns the sender address
   (when-let [^InetSocketAddress src (.receive ch buf)] ; fill buffer
-    (when-let [request-packet (read-request-packet buf opts)]
-      (let [msg {:src src
-                 :request-bytes request-packet
-                 :received-ns (System/nanoTime)}]
-        ;; place request on the queue
-        (a/>!! request-channel msg)))))
+    (let [received-ns (System/nanoTime)]
+     (when-let [request-packet (read-request-packet buf opts)]
+       (let [msg {:src src
+                  :request-bytes request-packet
+                  :received-ns received-ns
+                  :queued-ns (System/nanoTime)}]
+         ;; place request on the queue
+         (a/>!! request-channel msg))))))
 
 (defn- run-server-loop!
   "Run a blocking UDP server loop on the given channel+buffer until the
