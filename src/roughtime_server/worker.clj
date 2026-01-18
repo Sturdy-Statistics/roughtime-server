@@ -9,17 +9,23 @@
 (defn- process-batch
   "process a batch of requests.  returns a vector of maps
   {:src :response-bytes :received-ns :processed-ns}"
-  [batch batch-respond]
-  ;; batch is {:src :request-bytes :received-ns}
-  (let [request-batch (mapv :request-bytes batch)
+  [batch' batch-respond]
+  ;; batch is {:src :request-bytes :received-ns :batched-ns}
+  (let [t0            (System/nanoTime)
+        {:keys [batch batch-sent-ns]} batch'
+        batch-size    (count batch)
+        request-batch (mapv :request-bytes batch)
         responses     (batch-respond request-batch)
-        ts            (System/nanoTime)]
+        t1            (System/nanoTime)]
     (assert (= (count batch) (count responses)))
     (letfn [(xf [req rsp]
               ;; skip items without a response
               (when rsp (assoc req
                                :response-bytes rsp
-                               :processed-ns ts)))]
+                               :batch-sent-ns batch-sent-ns
+                               :worker-ns t0
+                               :batch-size batch-size
+                               :processed-ns t1)))]
       ;; drop items without a response
       (remove nil?
               (mapv xf batch responses)))))

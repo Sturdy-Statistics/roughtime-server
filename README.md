@@ -90,6 +90,32 @@ Shutdown flows naturally downstream:
 4. Workers drain and close `response-channel`
 5. Sender drains and exits
 
+## Performance Notes
+
+Below are average times in microseconds per response spent in each phase of the pipeline (sampled at 25,000 requests/sec on an M2 MacBook Air):
+
+| Phase          | Latency (μs) | Description                                           |
+|----------------|--------------|-------------------------------------------------------|
+| `:rcv-queue`   | 27           | Time from UDP read to batcher handoff                 |
+| `:batcher`     | 13           | Time spent accumulating in a batch                    |
+| `:batch-queue` | 0.1          | Wait time for an available CPU worker                 |
+| `:worker`      | 14           | Request parsing and cryptographic signing             |
+| `:send-queue`  | 2,212        | Wait time in `response-channel` for the UDP sender    |
+
+### Analysis
+
+The `:worker` phase involves parsing requests and assembling responses which include Ed25519 signatures.
+This is by far the most CPU-intensive step; however, at 14μs, it is not the primary bottleneck.
+
+The significant latency in `:send-queue` (approx. 98% of total time per response) is due to **Head-of-Line blocking** in the sender stage.
+Because the sender pulls from the response channel serially, messages finished “instantly” by the batched workers must wait for the single sender thread to perform the syscalls for all preceding messages in that batch.
+Speeding up this phase would *significantly* improve the throughput of the server.
+
+### Load Shedding & Back-pressure
+
+The server manages over-capacity through a combination of blocking and load-shedding:
+1. **Back-pressure:** When the sender cannot keep up, the `response-channel` fills, blocking the Workers.  This propagates back to the Batcher.
+2. **Load Shedding:** The `request-channel` uses a **sliding buffer**.  Once the downstream stages are blocked and the buffer is full, the server shed loads by dropping the oldest uncalculated requests, ensuring the server remains responsive and processes the most recent traffic possible.
 
 ---
 
