@@ -18,6 +18,7 @@
    :request-queue-depth 16384
    :batch-queue-depth 128  ;; 128 batches * 128 req/batch = 16384 req
    :response-queue-depth 16384
+   :stats-queue-depth 1024
    :udp-buffer-size-mb 20
    ;; paths
    :log-path       "logs/flashpaper-server.log"
@@ -45,6 +46,8 @@
     :request-queue-depth  {:coerce :long :desc "Queue depth for requests"  :validate pos-long?}
     :batch-queue-depth    {:coerce :long :desc "Queue depth for batches"   :validate pos-long?}
     :response-queue-depth {:coerce :long :desc "Queue depth for responses" :validate pos-long?}
+    :stats-queue-depth    {:coerce :long :desc "Queue depth for stats"     :validate pos-long?}
+    ;;
     :udp-buffer-size-mb   {:coerce :long :desc "UDP socket buffer size"    :validate pos-long?}
     ;; paths
     :log-path        {:coerce :string :desc "Server log path"}
@@ -118,6 +121,7 @@
 (defn request-queue-depth []  (:request-queue-depth @config*))
 (defn batch-queue-depth []    (:batch-queue-depth @config*))
 (defn response-queue-depth [] (:response-queue-depth @config*))
+(defn stats-queue-depth []    (:stats-queue-depth @config*))
 (defn udp-buffer-size-mb []   (:udp-buffer-size-mb @config*))
 
 (defn log-path []       (:log-path @config*))

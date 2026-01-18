@@ -20,7 +20,7 @@
         (if (nil? v)
           ;; input closed → flush and close
           (do
-            (when (seq batch) (a/>!! batch-channel {:batch batch :batch-sent-ns (System/nanoTime)}))
+            (when (seq batch) (a/>!! batch-channel {:batch batch :batch-queued-ns (System/nanoTime)}))
             (a/close! batch-channel))
           ;; received a request → append to batch
           (recur (conj batch (assoc v :batched-ns (System/nanoTime)))))
@@ -28,7 +28,7 @@
         ;; timeout or ::flush → flush and recur
         :else
         (do
-          (when (seq batch) (a/>!! batch-channel {:batch batch :batch-sent-ns (System/nanoTime)}))
+          (when (seq batch) (a/>!! batch-channel {:batch batch :batch-queued-ns (System/nanoTime)}))
           (recur []))))))
 
 (defn run-batcher!

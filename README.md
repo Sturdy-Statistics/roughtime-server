@@ -92,24 +92,48 @@ Shutdown flows naturally downstream:
 
 ## Performance Notes
 
+Above about 20,000 requests/sec the server will begin load shedding.
 Below are average times in microseconds per response spent in each phase of the pipeline (sampled at 25,000 requests/sec on an M2 MacBook Air):
 
-| Phase          | Latency (μs) | Description                                           |
-|----------------|--------------|-------------------------------------------------------|
-| `:rcv-queue`   | 27           | Time from UDP read to batcher handoff                 |
-| `:batcher`     | 13           | Time spent accumulating in a batch                    |
-| `:batch-queue` | 0.1          | Wait time for an available CPU worker                 |
-| `:worker`      | 14           | Request parsing and cryptographic signing             |
-| `:send-queue`  | 2,212        | Wait time in `response-channel` for the UDP sender    |
+```clj
+;; 2 workers; batch of 512 → communication bound, snd-queue backs up
+{;; compute time in μs, per request
+ :receive-and-queue    0.5
+ :batch               12.5
+ :respond             11.8
+ :send                 5.3
+
+ ;; queue wait time in μs
+ :rvc-queue           27.9 ;; single req
+ :worker-queue        54.3 ;; batch of 512
+ :snd-queue          370.0 ;; batch of 512
+ }
+```
+
+
+```clj
+;; 1 worker; batch of 64 → CPU-bound
+{ ;; compute time in μs, per request
+ :receive-and-queue  0.5
+ :batch             11.9
+ :respond           10.6
+ :send               4.4
+
+ ;; queue wait time in μs
+ :rvc-queue         20.8 ;; single req
+ :worker-queue      54.0 ;; batch of 64
+ :snd-queue         64.2 ;; batch of 64
+ }
+```
 
 ### Analysis
 
-The `:worker` phase involves parsing requests and assembling responses which include Ed25519 signatures.
-This is by far the most CPU-intensive step; however, at 14μs, it is not the primary bottleneck.
+In both cases, the total compute time of ~30 μs per response implies a max throughput of ~30k req/sec.
 
-The significant latency in `:send-queue` (approx. 98% of total time per response) is due to **Head-of-Line blocking** in the sender stage.
-Because the sender pulls from the response channel serially, messages finished “instantly” by the batched workers must wait for the single sender thread to perform the syscalls for all preceding messages in that batch.
-Speeding up this phase would *significantly* improve the throughput of the server.
+The `:respond` phase involves parsing requests and assembling responses which include Ed25519 signatures.
+This is by far the most CPU-intensive step; however, at ~12 μs, it is not the primary bottleneck.
+In theory, with 4 cores the workers could respond to >300k req/sec; however, the batcher and sender would become bottlenecks.
+A high performance server would need to speed up these steps.
 
 ### Load Shedding & Back-pressure
 
