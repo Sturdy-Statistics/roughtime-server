@@ -8,8 +8,8 @@
    :port           2002
    :host           "127.0.0.1"
    ;; workers
-   :num-workers 1
-   :max-batch-size 128
+   :num-workers 2
+   :max-batch-size 256
    :flush-ms 100
    ;; size policy
    :min-msg-size 1012
