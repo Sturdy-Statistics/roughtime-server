@@ -19,7 +19,7 @@
                         :snd-queue 0}]
     (if-let [v (a/<! stats-ch)]
       (let [dt-ms (- (System/currentTimeMillis) t-start)]
-        (if (or (>= n-sample 1000000)
+        (if (or (>= n-sample 100000)
                 (and (>= n-sample 1000) (>= dt-ms 3600000)))
           ;; flush stats
           (do
