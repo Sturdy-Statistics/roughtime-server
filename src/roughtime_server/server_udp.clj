@@ -69,13 +69,15 @@
   ([port] (run-server! "127.0.0.1" port))
   ([bind-addr port]
    (let [;; when the channel is full, drop *oldest* items
-         request-channel (a/chan (a/sliding-buffer (config/request-queue-depth)))
-         ^DatagramChannel ch (DatagramChannel/open)]
+         request-channel     (a/chan (a/sliding-buffer (config/request-queue-depth)))
+         ^DatagramChannel ch (DatagramChannel/open)
+         buf-size-mb         (config/udp-buffer-size-mb)]
 
      ;; allow quick restarts
      (.setOption ch StandardSocketOptions/SO_REUSEADDR Boolean/TRUE)
      ;; buffer up to 1Mb of incoming requests
-     (.setOption ch StandardSocketOptions/SO_RCVBUF ^Integer (int (* 1024 1024)))
+     (.setOption ch StandardSocketOptions/SO_RCVBUF ^Integer (int (* buf-size-mb 1024 1024)))
+     (.setOption ch StandardSocketOptions/SO_SNDBUF ^Integer (int (* buf-size-mb 1024 1024)))
 
      (.bind ch (InetSocketAddress. bind-addr (int port)))
      (.configureBlocking ch true)
