@@ -1,13 +1,14 @@
 {:paths ["src" "resources"]
- :deps {org.clojure/clojure       {:mvn/version "1.12.2"}
+ :deps {org.clojure/clojure       {:mvn/version "1.12.4"}
         org.clojure/core.async    {:mvn/version "1.8.741"}
         com.taoensso/truss        {:mvn/version "2.2.0"}
-        com.taoensso/telemere     {:mvn/version "1.0.1"}
-        com.taoensso/tempel       {:mvn/version "1.0.0-RC1"}
+        com.taoensso/telemere     {:mvn/version "1.2.1"}
+        ;;com.taoensso/tempel       {:mvn/version "1.1.0"}
         org.babashka/cli          {:mvn/version "0.8.66"}
         babashka/fs               {:mvn/version "0.5.27"}
-        com.sturdystats/sturdy-fs {:mvn/version "0.1.3"}
+        com.sturdystats/sturdy-fs {:mvn/version "0.1.6"}
         jarohen/chime             {:mvn/version "0.3.3"}
+        com.sturdystats/bailey    {:mvn/version "0.0.4"}
 
         com.sturdystats/roughtime-protocol {:mvn/version "0.1.1"}}
 
@@ -16,6 +17,7 @@
 
            :local-deps
            {:extra-deps {com.sturdystats/sturdy-fs {:local/root "../sturdy-fs"}
+                         com.sturdystats/bailey    {:local/root "../bailey"}
                          com.sturdystats/roughtime-protocol
                          {:local/root "../roughtime-protocol"}}}
 
@@ -26,9 +28,11 @@
             :main-opts ["-m" "cognitect.test-runner"]
             :exec-fn     cognitect.test-runner.api/test}
 
-           :make-secrets
-           {:exec-fn roughtime-server.keys/make-secrets
-            :exec-args {:secrets-dir "secrets"}}
+           :make-backup-key
+           {:exec-fn roughtime-server.keys/make-backup-key
+            :exec-args {:secrets-dir "secrets"
+                        :force? flase
+                        :resources-dir "resources"}}
 
            :build
            {:deps {io.github.clojure/tools.build {:mvn/version "0.10.10"}

@@ -14,12 +14,13 @@
    [roughtime-server.batcher    :as batcher]
    [roughtime-server.worker     :as worker]
    [roughtime-server.sender     :as sender]
+   [roughtime-server.schedules  :as sch]
    ;;
-   [chime.core :as chime]
+   [babashka.fs :as fs]
+   [sturdy.fs :as sfs]
+   [bailey.core :as bailey]
    ;;
    [taoensso.telemere :as t])
-  (:import
-   (java.time LocalTime ZonedDateTime ZoneId Period))
   (:gen-class))
 
 (set! *warn-on-reflection* true)
@@ -51,44 +52,56 @@
   (t/set-min-level! :slf4j "org.eclipse.jetty.*" :warn))
 
 ;;; ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;; crypto
+
+(defn read-server-password!!
+  []
+  (let [p (fs/path (config/tpm-password-path))]
+    (when-not (fs/exists? p)
+      (throw (ex-info "password path not readable" {:p p})))
+    (-> p
+        (sfs/ensure-400)
+        (sfs/slurp-bytes))))
+
+(defn rotate-bailey! [_time]
+  (bailey/rotate-keys! read-server-password!!)
+  (t/log! {:msg "Server keys rotated successfully"}))
+
+(defn- init-bailey! []
+  ;; TODO: remove this!
+  (when-not (fs/exists? (config/tpm-password-path))
+    (-> (config/tpm-password-path)
+        (sfs/spit-bytes! (.getBytes "this is insecure!" "US-ASCII"))
+        (sfs/chmod-400!)))
+
+  (bailey/init! {:keychain-path (config/bailey-keychain-path)
+                 :read-server-password!! read-server-password!!
+                 :backup-key-path (config/backup-key-path)}))
+
+;;; ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; keys
 
 (defonce cert (atom nil))
 
-;; TTL of 48 hours, rotate every 24 hours
-(def online-key-lifetime-secs (* 48 3600))
+;; TTL of 8 days, rotate every week (defined in schedules.clj)
+(def online-key-lifetime-secs (* 8 24 3600))
 
-(defn install-new-cert! [secrets-dir]
+(defn install-new-cert! []
   (when-let [old @cert]
     (t/log! {:level :info
              :id ::cert-exp
              :data (check-cert-expiration old)}))
-  (let [new (mint-certificate
-             secrets-dir online-key-lifetime-secs)]
+  (let [new (mint-certificate online-key-lifetime-secs)]
     (swap! cert (constantly new))
     (t/log! {:level :info
              :id ::cert-install
              :msg "Installed new online certificate"})))
 
-(defn log-public-key [secrets-dir]
-  (let [data (read-longterm-public-key secrets-dir)]
+(defn log-public-key []
+  (let [data (read-longterm-public-key)]
     (t/log! {:level :info
              :id ::pub-key
              :data data})))
-
-
-;;; ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;; key rotation
-
-(def rotate-schedule
-  (chime/periodic-seq (-> (LocalTime/of 1 0 0) ; 1AM Los Angeles time
-                          (.adjustInto (ZonedDateTime/now (ZoneId/of "America/Los_Angeles")))
-                          .toInstant)
-                      (Period/ofDays 1)))
-
-(defn start-key-rotator!
-  [rotate-cert-fn]
-  (chime/chime-at rotate-schedule rotate-cert-fn))
 
 ;;; ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; server
@@ -188,12 +201,22 @@
   (try
     (config/load! argv)
 
-    (let [rotate-cert-fn (fn [_time] (install-new-cert! (config/secrets-dir)))]
+    (letfn [(rotate-cert-fn [_time] (install-new-cert!))]
 
+      ;; core services first
       (init-logging! (config/log-path))
-      (rotate-cert-fn 0)
-      (log-public-key (config/secrets-dir))
-      (start-key-rotator! rotate-cert-fn))
+      (init-bailey!)
+
+      ;; create a fresh cert on startup
+      (install-new-cert!)
+
+      ;; log public key
+      (log-public-key)
+
+      ;; launch key rotators
+      (sch/start-key-rotators!
+       {:rotate-bailey! rotate-bailey!
+        :install-new-cert! rotate-cert-fn}))
 
     (let [stop! (launch)]
       (add-shutdown-hook! stop!)

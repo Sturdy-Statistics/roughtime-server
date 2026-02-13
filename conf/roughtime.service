@@ -8,27 +8,30 @@ Wants=network-online.target
 # Run as a dedicated, unprivileged user
 User=roughtime
 Group=roughtime
-WorkingDirectory=/opt/roughtime/roughtime-server
+WorkingDirectory=/opt/roughtime
 
 # Ensure PATH includes java
 Environment=PATH=/usr/bin
 
 # secrets
-LoadCredentialEncrypted=longterm.prv.b64:/etc/roughtime/longterm.prv.b64.cred
-LoadCredentialEncrypted=longterm.pub:/etc/roughtime/longterm.pub.cred
-LoadCredentialEncrypted=keychain.b64:/etc/roughtime/keychain.b64.cred
-LoadCredentialEncrypted=password.edn:/etc/roughtime/password.edn.cred
+LoadCredentialEncrypted=password.bytes:/etc/roughtime/password.bytes.cred
 
 # Env vars
 Environment=LOG_PATH=/opt/roughtime/logs/roughtime.log
+Environment=ARTIFACTS_DIR=artifacts
 
 # app entrypoint
 Type=exec
 
-ExecCondition=/usr/bin/test -r /opt/roughtime/roughtime-server/current-standalone.jar
-ExecStart=/usr/bin/java -jar /opt/roughtime/roughtime-server/current-standalone.jar \
-  :secrets-dir ${CREDENTIALS_DIRECTORY} \
-  :log-path ${LOG_PATH}
+ExecCondition=/usr/bin/test -r /opt/roughtime/current-standalone.jar
+ExecStart=/usr/bin/java \
+  -Djava.net.preferIPv4Stack=true \
+  -jar /opt/roughtime/current-standalone.jar \
+  :tpm-secrets-dir "${CREDENTIALS_DIRECTORY}" \
+  :artifacts-dir "${ARTIFACTS_DIR}" \
+  :log-path ${LOG_PATH} \
+  :host "127.0.0.1" \
+  :port 12002
 
 # Graceful shutdown:
 # send SIGTERM to main proc, then SIGKILL to all procs after TimeoutStopSec
@@ -73,14 +76,16 @@ ProtectControlGroups=yes
 # - home directories appear empty 
 ProtectHome=yes
 # - whitelist for writing
-ReadWritePaths=/opt/roughtime/logs
+ReadWritePaths=/opt/roughtime/logs /opt/roughtime/artifacts
 # -
 PrivateUsers=yes
 ProtectHostname=yes
 ProtectClock=yes
 ProtectKernelModules=yes
 ProtectKernelLogs=yes
-RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+# Network Hardening (Strict IPv4 Loopback)
+# We force IPv4 in ExecStart, so we can deny IPv6 here
+RestrictAddressFamilies=AF_UNIX AF_INET
 RestrictNamespaces=yes
 LockPersonality=yes
 MemoryDenyWriteExecute=no
@@ -93,7 +98,7 @@ SystemCallErrorNumber=EPERM
 # restrict network access to loopback
 IPAddressAllow=127.0.0.1
 IPAddressDeny=any
-SocketBindAllow=ipv4:udp:2002
+SocketBindAllow=ipv4:udp:12002
 SocketBindDeny=any
 
 # extra hardening
