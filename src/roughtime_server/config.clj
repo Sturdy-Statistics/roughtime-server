@@ -1,6 +1,7 @@
 (ns roughtime-server.config
   (:require
    [babashka.cli :as cli]
+   [babashka.fs :as fs]
    [taoensso.telemere :as t]))
 
 (def ^:private defaults
@@ -8,21 +9,22 @@
    :port           2002
    :host           "127.0.0.1"
    ;; workers
-   :num-workers 2
+   :num-workers      2
    :max-batch-size 256
-   :flush-ms 100
+   :flush-ms       100
    ;; size policy
-   :min-msg-size 1012
-   :max-msg-size 2048
+   :min-msg-size  1012
+   :max-msg-size  2048
    ;; queues
-   :request-queue-depth 16384
-   :batch-queue-depth 128  ;; 128 batches * 128 req/batch = 16384 req
+   :request-queue-depth  16384
+   :batch-queue-depth      128  ;; 128 batches * 128 req/batch = 16384 req
    :response-queue-depth 16384
-   :stats-queue-depth 1024
-   :udp-buffer-size-mb 20
+   :stats-queue-depth     1024
+   :udp-buffer-size-mb      20
    ;; paths
-   :log-path       "logs/flashpaper-server.log"
-   :secrets-dir    "secrets"})
+   :log-path        "logs/roughtime-server.log"
+   :tpm-secrets-dir "secrets"
+   :artifacts-dir   "artifacts"})
 
 (defn usage
   [spec]
@@ -51,7 +53,8 @@
     :udp-buffer-size-mb   {:coerce :long :desc "UDP socket buffer size"    :validate pos-long?}
     ;; paths
     :log-path        {:coerce :string :desc "Server log path"}
-    :secrets-dir     {:coerce :string :desc "Path to dir for server secrets"}}})
+    :tpm-secrets-dir {:coerce :string :desc "Path to dir with secrets ($CREDENTIALS_DIRECTORY in prod)"}
+    :artifacts-dir   {:coerce :string :desc "Path to dir for server artifacts"}}})
 
 (defn- print-errors! [errors]
   (binding [*out* *err*]
@@ -108,21 +111,45 @@
 ;; ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; accessors
 
-(defn port []           (:port @config*))
-(defn host []           (:host @config*))
+(defn- cfg-get [k]
+  (require-config)
+  (get (config) k))
 
-(defn num-workers []    (:num-workers @config*))
-(defn max-batch-size [] (:max-batch-size @config*))
-(defn flush-ms []       (:flush-ms @config*))
+(defn port []           (cfg-get :port))
+(defn host []           (cfg-get :host))
 
-(defn min-msg-size []   (:min-msg-size @config*))
-(defn max-msg-size []   (:max-msg-size @config*))
+(defn num-workers []    (cfg-get :num-workers))
+(defn max-batch-size [] (cfg-get :max-batch-size))
+(defn flush-ms []       (cfg-get :flush-ms))
 
-(defn request-queue-depth []  (:request-queue-depth @config*))
-(defn batch-queue-depth []    (:batch-queue-depth @config*))
-(defn response-queue-depth [] (:response-queue-depth @config*))
-(defn stats-queue-depth []    (:stats-queue-depth @config*))
-(defn udp-buffer-size-mb []   (:udp-buffer-size-mb @config*))
+(defn min-msg-size []   (cfg-get :min-msg-size))
+(defn max-msg-size []   (cfg-get :max-msg-size))
 
-(defn log-path []       (:log-path @config*))
-(defn secrets-dir []    (:secrets-dir @config*))
+(defn request-queue-depth []  (cfg-get :request-queue-depth))
+(defn batch-queue-depth []    (cfg-get :batch-queue-depth))
+(defn response-queue-depth [] (cfg-get :response-queue-depth))
+(defn stats-queue-depth []    (cfg-get :stats-queue-depth))
+(defn udp-buffer-size-mb []   (cfg-get :udp-buffer-size-mb))
+
+(defn log-path []       (cfg-get :log-path))
+(defn artifacts-dir []  (cfg-get :artifacts-dir))
+
+;;; other
+
+(defn tpm-password-path []
+  (-> (cfg-get :tpm-secrets-dir)
+      (fs/path "password.bytes")
+      (fs/absolutize)
+      str))
+
+(defn backup-key-path []
+  (-> (artifacts-dir)
+      (fs/path "tempel_server_keys" "backup_pub.key")
+      (fs/absolutize)
+      str))
+
+(defn bailey-keychain-path []
+  (-> (artifacts-dir)
+      (fs/path "bailey-keychain.encrypted")
+      (fs/absolutize)
+      str))

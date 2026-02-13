@@ -38,6 +38,27 @@ Each stage has a single responsibility:
 
 The server manages thread lifecycle passively via channel closure, rather than needing explicit stop signals.
 
+## Quick Start
+
+1. **Run the server**
+
+This uses ad hoc keys and is NOT secure for production use.
+```bash
+clj -M:run
+```
+
+When the server starts up, watch the log.
+It will print the base64 public key, which you need to make requests.
+
+2. **Query it** (in a separate terminal):
+
+Once the server is running, you can test it on a different machine using a RoughTime client.
+If you use [ours](https://github.com/Sturdy-Statistics/roughtime-client), you can run:
+
+```
+clj -M:run :address "127.0.0.1:2002" :protocol "udp" :public-key "<YOUR-KEY-B64>" :version-no "0x8000000c"
+```
+
 ## Design Principles
 
 ### 1. Bounded Everywhere
@@ -104,7 +125,7 @@ Below are average times in microseconds per response spent in each phase of the 
  :send                 5.3
 
  ;; queue wait time in μs
- :rvc-queue           27.9 ;; single req
+ :rcv-queue           27.9 ;; single req
  :worker-queue        54.3 ;; batch of 512
  :snd-queue          370.0 ;; batch of 512
  }
@@ -120,7 +141,7 @@ Below are average times in microseconds per response spent in each phase of the 
  :send               4.4
 
  ;; queue wait time in μs
- :rvc-queue         20.8 ;; single req
+ :rcv-queue         20.8 ;; single req
  :worker-queue      54.0 ;; batch of 64
  :snd-queue         64.2 ;; batch of 64
  }
@@ -145,57 +166,16 @@ The server manages over-capacity through a combination of blocking and load-shed
 
 ## Running the Server
 
-The RoughTime server requires cryptographic secrets to run.
-These include the server’s long-term key material used to sign certificates.
-
-### Generating secrets
-
-Generate the required secrets with:
-
-```bash
-clojure -X:local-deps:make-secrets
-```
-
-This command will print a **public key** to stdout.
-Save this value — clients need it to validate server responses.
-
-By default, `make-secrets` writes secrets to a local directory named `secrets/`.
-
-> ⚠️ This default is convenient for development, but not compatible with running the server from an uberjar.
-
-To write secrets to a different location, run:
-
-```bash
-clojure -X:local-deps:make-secrets :secrets-dir '"path/to/secrets"'
-```
-
-Note the double quoting: this is required so the shell passes a string that Clojure can read as EDN.
-
 ### Running the server directly
 
 To run the server from source:
 
 ```bash
-clj -M:run \
-  :secrets-dir path/to/secrets \
-  :log-path path/to/logs/roughtime.log
+clj -M:run
 ```
 
-### Building and running an uberjar
-
-To build a self-contained uberjar:
-
-```bash
-clj -T:build uber
-```
-
-Then launch the server with:
-
-```bash
-java -jar target/roughtime-server-v0.1.1-standalone.jar \
-  :secrets-dir /path/to/secrets \
-  :log-path /path/to/logs/roughtime.log
-```
+This will generate ad-hoc cryptographic secrets and run, but it is NOT secure.
+To deploy the server, use the makefile described in DEPLOY.md.
 
 ### Verifying operation
 
