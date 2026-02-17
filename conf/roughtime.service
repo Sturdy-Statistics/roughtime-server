@@ -85,7 +85,7 @@ ProtectKernelModules=yes
 ProtectKernelLogs=yes
 # Network Hardening (Strict IPv4 Loopback)
 # We force IPv4 in ExecStart, so we can deny IPv6 here
-RestrictAddressFamilies=AF_UNIX AF_INET
+RestrictAddressFamilies=AF_INET
 RestrictNamespaces=yes
 LockPersonality=yes
 MemoryDenyWriteExecute=no
@@ -93,7 +93,9 @@ RestrictRealtime=yes
 RestrictSUIDSGID=yes
 PrivateMounts=yes
 SystemCallFilter=@system-service
+SystemCallFilter=~@privileged @resources @reboot @setuid
 SystemCallErrorNumber=EPERM
+SystemCallArchitectures=native
 
 # restrict network access to loopback
 IPAddressAllow=127.0.0.1
